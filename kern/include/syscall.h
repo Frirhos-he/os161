@@ -65,4 +65,5 @@ struct openfile;
 void openfileIncrRefCount(struct openfile *of);
 int sys_open(userptr_t path, int openflags, mode_t mode, int *errp);
 int sys_close(int fd);
+off_t sys_lseek(int fd, off_t pos, int whence);
 #endif /* _SYSCALL_H_ */
