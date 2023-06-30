@@ -37,6 +37,7 @@
  */
 
 #include <spinlock.h>
+#include <limits.h>
 
 struct addrspace;
 struct thread;
@@ -70,6 +71,7 @@ struct proc {
 	/* VFS */
 	struct vnode *p_cwd;		/* current working directory */
 
+    struct openfile *fileTable[OPEN_MAX];
 	/* add more material here as needed */
 };
 
@@ -97,5 +99,6 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
+void proc_file_table_copy(struct proc *psrc, struct proc *pdest);
 
 #endif /* _PROC_H_ */
