@@ -47,6 +47,9 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
       of = &systemFileTable[i];
       of->vn = v;
       of->offset = 0; // TODO: handle offset with append
+      if(openflags && O_APPEND != 0){
+        of->offset = v->vn_len;
+      }
       of->countRef = 1;
       break;
     }
