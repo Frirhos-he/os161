@@ -149,6 +149,8 @@ thread_create(const char *name)
 
 	/* If you add to struct thread, be sure to initialize here */
 
+    thread->t_return = 0;
+
 	return thread;
 }
 
@@ -417,7 +419,7 @@ cpu_hatch(unsigned software_number)
 	kprintf("cpu%u: %s\n", software_number, buf);
 
 	V(cpu_startup_sem);
-	thread_exit();
+	thread_exit(0);
 }
 
 /*
@@ -763,7 +765,7 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
 	entrypoint(data1, data2);
 
 	/* Done. */
-	thread_exit();
+	thread_exit(0);
 }
 
 /*
@@ -776,12 +778,13 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
  * Does not return.
  */
 void
-thread_exit(void)
+thread_exit(int ret)
 {
 	struct thread *cur;
 
 	cur = curthread;
 
+    cur->t_return = ret;
 	/*
 	 * Detach from our process. You might need to move this action
 	 * around, depending on how your wait/exit works.
