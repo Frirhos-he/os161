@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <uio.h>
 #include <proc.h>
+#include <kern/stat.h>
 
 /* max num of system wide open files */
 #define SYSTEM_OPEN_MAX (10*OPEN_MAX)
@@ -41,6 +42,17 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     *errp = ENOENT;
     return -1;
   }
+
+  struct stat = file_stat;
+  result = VOP_STAT(vn, &file_stat);
+  if(result){
+    *errp = ENOENT;
+    return -1;
+  }
+
+  off_t file_size = file_stat.st_size;
+  v->vn_len = file_size;
+
   /* search system open file table */
   for (i=0; i<SYSTEM_OPEN_MAX; i++) {
     if (systemFileTable[i].vn==NULL) {

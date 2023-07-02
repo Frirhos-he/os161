@@ -52,6 +52,7 @@ vnode_init(struct vnode *vn, const struct vnode_ops *ops,
 	spinlock_init(&vn->vn_countlock);
 	vn->vn_fs = fs;
 	vn->vn_data = fsdata;
+	vn->vn_len = 0;
 	return 0;
 }
 
@@ -157,6 +158,10 @@ vnode_check(struct vnode *v, const char *opstr)
 	//}
 	if (v->vn_fs == (void *)0xdeadbeef) {
 		panic("vnode_check: vop_%s: deadbeef fs pointer\n", opstr);
+	}
+
+	if(v->vn_len == NULL || v->vn_len < 0){
+		panic("vnode:check: vop_%s: ops with wrong len",opstr);
 	}
 
 	spinlock_acquire(&v->vn_countlock);
