@@ -461,3 +461,20 @@ proc_signal_end(struct proc *proc)
       lock_release(proc->p_lock);
 #endif
 }
+
+void curproc_cleanup(){
+
+	if(curproc->fileTable!=NULL){
+		for (int i = 0; i++;i< OPEN_MAX){
+			if(curproc->fileTable[i]!=NULL){
+				VOP_DECREF(curproc->fileTable[i]->vn);
+				kfree(curproc->fileTable[i]);
+				curproc->fileTable[i] = NULL;
+			}
+		}
+	}
+	kfree(curproc->fileTable);
+	proc_remthread(curthread);
+
+
+}

@@ -120,4 +120,6 @@ void proc_signal_end(struct proc *proc);
 
 /* get proc from pid */
 struct proc *proc_search_pid(pid_t pid);
+
+void curproc_cleanup();
 #endif /* _PROC_H_ */

@@ -104,3 +104,184 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
 
   return 0;
 }
+
+int sys_execv(const char * progname, char ** args){
+
+    struct addrspace *as;
+    struct vnode *v;
+
+    vaddr_t entrypoint,stackptr;
+    int result;
+
+    int num_args = 0;
+    while(args[num_args] != NULL){
+        num_args++;
+    }
+
+    char **kargs = kmalloc((num_args+1)*sizeof(char *));
+    if(kargs == NULL){
+        return ENOMEM;
+    }
+
+    result = copyin_args(progname,args,num_args,kargs);
+
+    if(result){
+        kfree(args);
+        return result;
+    }
+
+    //open the executable file
+    result = vfs_open(kargs[0],O_RDONLY,0,&v);
+
+    if(result){
+        kfree(args);
+        return result;
+    }
+    //create a new address space
+    as = as_create();
+    if(as == NULL){
+        vfs_close(v);
+        kfree(args);
+        return ENOMEM;
+    }
+
+    //switch to the new address space
+    proc_setas(as);
+    as_activate();
+
+    //load the executable
+
+    result = load_elf(v,&entrypoint);
+    if(result){
+        vfs_close(v);
+        kfree(args);
+        return result;
+    }
+
+    //done with the file
+    vfs_close(v);
+
+    //define the user stack in the address space
+    result = as_define_stack(as,&stackptr);
+    if(result){
+        kfree(args);
+        return result;
+    }
+
+    //copy arguments to the user stack
+    result = copyout_args(kargs,num_args,&stackptr);
+    if(result){
+        kfree(args);
+        return result;
+    }
+
+    //free the kernel-space argument array
+    kfree(args);
+
+    //warp to user mode
+    enter_new_process(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
+
+    //enter_new_process does not return
+    panic("enter new process returne\n");
+    return EINVAL;
+}
+
+int copyin_args(const char *progname, char **args, int num_args, char **kargs){
+    
+    int result,i;
+    
+    //copy programname
+    result = copyinstr((const userptr_t)progname,kargs,PATH_MAX,NULL);
+    if(result){
+        return result;
+    }
+
+    //copy arguments
+    for(i = 0; i < num_args; i++){
+        kargs[i+1] = kmalloc(ARG_MAX);
+
+        if(kargs[i+1] == NULL){
+            for (j = 0 ; j<i+1;j++){
+                kfree(kargs[j]);
+            }
+            return ENOMEM
+        }
+
+        result = copyinstr((const userptr_t)args[i],kargs[i+1],ARG_MAX,NULL);
+        if(result){
+            for (j = 0 ; j<i+1;j++){
+                kfree(kargs[j]);
+            }
+            return result;
+        }
+    }
+    kargs[num_args+1] = NULL;
+
+    return 0;
+
+}
+int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr){
+    int result,i;
+    vaddr_t argv[num_args+1];
+
+    //copy arguments to user stack in reverse order
+    for (i = num_args -1; i >= 0; i--){
+
+        size_t arglen = strlen(kargs[i])+1;
+        //align the stack pointer
+        *stackptr -= ROUNDUP(arglen,sizeof(void*));
+        result = copyoutstr(kargs[i],(userptr_t)(*stackptr),arglen,NULL);
+        if(result){
+            return result;
+        }
+        argv[i] = *stackptr;
+    }
+
+    //copy argument pointers to user stack
+    *stackptr -= ROUNDUP ((num_args+1)*sizeof(void*),sizeof(void*));
+    result = copyout(argv,(userptr_t)(*stackptr),(num_args+1)*sizeof(void*));
+    if(result){
+        return result;
+    }
+
+    return 0;
+}
+
+void enter_new_process(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr){
+
+    struct trapframe tf;
+    struct addrspace *as;
+    struct proc *cur;
+    int spl;
+
+    (void)entrypoint;//not used in this implementation
+
+    as_deactivate();
+    as = proc_setas(NULL);
+    as_destroy(as);
+
+    curproc_cleanup();
+
+    spl = splhigh(); //disable interrupts temporarily
+
+    //copy the contents of the trapframe from the stack pointer to the local trapframe
+    tf = *(struct trapframe)stackptr;
+    kfree((void*)stackptr);
+
+    //update the registers of the child's trapframe
+    tf.tf_a3 = 0;
+    tf.tf_v0 = 0;
+    tf.tf_epc +=4;
+
+    //activate the new process' addres space
+    as = as_copy(curproc->p_addrspace)
+    if(as == NULL){
+        return;
+    }
+    proc_setas(as);
+    as_activate();
+    call_enter_forked_process((void*)tf,(unsigned long)0 /*unused*/);
+
+    panic("enter_new_process: enter_forked_process returned\n");
+
+}
