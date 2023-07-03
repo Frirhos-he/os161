@@ -480,3 +480,46 @@ int sys_chdir(userptr_t path){
     return 0;
 
 }
+
+//getcwd syscall
+
+int sys_getcwd(userptr_t buf_ptr,size_t size){
+    
+    if(buf_ptr == NULL){
+        return EFAULT;
+    }
+
+    struct vnode *cwd = curthread->t_cwd;
+    if(cwd == NULL){
+        return EINVAL;
+    }
+
+    char *kbuf;
+    int result;
+    size_t len;
+
+    kbuf = kmalloc(PATH_MAX);
+    if(kbuf == NULL){
+        return ENOMEM;
+    }
+
+    result = vfs_getcwd(kbuf,PATH_MAX,&len);
+    if(result){
+        kfree(kbuf);
+        return result;
+    }
+
+    if(len+1 > size){
+        kfree(kbuf);
+        return ENAMETOOLONG;
+    }
+
+    result = copyoutstr(kbuf,buf_ptr,bufsize,NULL);
+    if(result){
+        kfree(kbuf);
+        return result;
+    }
+
+    kfree(kbuf);
+    return 0;
+}
