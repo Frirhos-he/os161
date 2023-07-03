@@ -450,3 +450,14 @@ proc_wait(struct proc *proc,int options)
 		}
         return return_status;
 }
+void
+proc_signal_end(struct proc *proc)
+{
+#if USE_SEMAPHORE_FOR_WAITPID
+      V(proc->p_sem);
+#else
+      lock_acquire(proc->p_lock);
+      cv_signal(proc->p_cv);
+      lock_release(proc->p_lock);
+#endif
+}
