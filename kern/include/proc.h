@@ -60,6 +60,8 @@ struct vnode;
  * thread_switch needs to be able to fetch the current address space
  * without sleeping.
  */
+
+#define USE_SEMAPHORE_FOR_WAITPID 1
 struct proc {
 	char *p_name;			/* Name of this process */
 	struct spinlock p_lock;		/* Lock for this structure */
@@ -72,6 +74,15 @@ struct proc {
 	struct vnode *p_cwd;		/* current working directory */
 
     struct openfile *fileTable[OPEN_MAX];
+	int p_status;                   /* status as obtained by exit() */
+    pid_t p_pid;                    /* process pid */
+
+#if USE_SEMAPHORE_FOR_WAITPID
+	struct semaphore *p_sem;
+#else
+    struct cv *p_cv;
+    struct lock *p_lock;
+#endif
 	/* add more material here as needed */
 };
 
@@ -101,4 +112,9 @@ struct addrspace *proc_setas(struct addrspace *);
 
 void proc_file_table_copy(struct proc *psrc, struct proc *pdest);
 
+/* wait for process termination, and return exit status */
+int proc_wait(struct proc *proc,int options);
+
+/* get proc from pid */
+struct proc *proc_search_pid(pid_t pid);
 #endif /* _PROC_H_ */

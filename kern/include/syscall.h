@@ -69,4 +69,6 @@ int sys_lseek(int fd, off_t pos, int whence);
 int sys_dup2(int oldfd,int newfd);
 int sys_chdir(userptr_t path);
 int sys_getcwd(userptr_t buf_ptr,size_t size);
+int sys_waitpid(pid_t pid, userptr_t statusp, int options);
+pid_t sys_getpid(void);
 #endif /* _SYSCALL_H_ */
