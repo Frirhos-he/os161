@@ -118,9 +118,11 @@ syscall(struct trapframe *tf)
 				(userptr_t)tf->tf_a1,
 				(size_t)tf->tf_a2);
 		/* error: function not implemented */
-                if (retval<0) err = ENOSYS; 
-		else err = 0;
-                break;
+            if (retval<0)
+				err = retval;
+			else 
+				err = 0;
+            break;
 
 				
         case SYS_write:
@@ -128,25 +130,34 @@ syscall(struct trapframe *tf)
 				(userptr_t)tf->tf_a1,
 				(size_t)tf->tf_a2);
 		/* error: function not implemented */
-                if (retval<0) err = ENOSYS; 
-		else err = 0;
-                break;
+            if (retval<0)
+				err = retval;
+			else
+				err = 0;
+            break;
 
 		case SYS_open:
 	        retval = sys_open((userptr_t)tf->tf_a0,
 				  (int)tf->tf_a1,
 				  (mode_t)tf->tf_a2, &err);
-                break;
+			if (retval<0)
+				err = retval;
+			else
+				err = 0;
+            break;
 	    case SYS_close:
 	        retval = sys_close((int)tf->tf_a0);
-		if (retval<0) err = ENOENT; 
-                break;	
+			if (retval<0)
+				err = retval;
+			else
+				err = 0;
+            break;	
 
 		case SYS_lseek:
 		    retval = sys_lseek((int)tf->tf_a0,(off_t)tf->tf_a1,
 			(int)tf->tf_a2);
 			if(retval<0)
-				err = -retval;
+				err = retval;
 			else
 				err = 0;
 			break;
@@ -158,7 +169,6 @@ syscall(struct trapframe *tf)
 			else
 				err = 0;
 			break;
-		
 		case SYS_chdir:
 			retval = sys_chdir((userptr_t)tf->tf_a0);
 			if(retval<0)
