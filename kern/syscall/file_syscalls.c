@@ -428,7 +428,6 @@ int fdtable_dup(int oldfd, int newfd){
 }
 
 int file_dup(struct openfile * old_file,struct openfile * new_file){
-    
     KASSERT(old_file != NULL);
     KASSERT(new_file != NULL);
 
@@ -441,4 +440,43 @@ int file_dup(struct openfile * old_file,struct openfile * new_file){
 
     return 0;
     
+}
+
+int sys_chdir(userptr_t path){
+
+    if(path == NULL){
+        return EFAULT;
+    }
+
+    char * kbuf;
+    int result;
+
+    //allocate kernel buffer
+    kbuf = kmalloc(PATH_MAX);
+    if(kbuf == NULL){
+        return ENOMEM;
+    }
+
+    //copy the pathname from user space to kernel buffer
+    result = copyinstr(path,kbuf,PATH_MAX,NULL);
+    if(result){
+        kfree(kbuf);
+        return result;
+    }
+
+    //open the directory
+    struct vnode *newcwd;
+    result = vfs_ope(kbuf,O_READONLY,,0,&v);
+    if(result){
+        kfree(kbuf);
+        return result;
+    }
+
+    struct vnode * oldcwd = curthread->t_cwd;
+    curthread->t_cwd = newcwd;
+    vfs_close(oldcwd);
+
+    kfree(kbuf);
+    return 0;
+
 }
