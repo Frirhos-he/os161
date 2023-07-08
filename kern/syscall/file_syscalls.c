@@ -14,6 +14,7 @@
 #include <kern/stat.h>
 #include <thread.h>
 #include <kern/include/syscall.h>
+#include <spinlock.h>
 
 /* max num of system wide open files */
 #define SYSTEM_OPEN_MAX (10*OPEN_MAX)
@@ -25,13 +26,17 @@ struct openfile {
   struct vnode *vn;
   off_t offset;	
   unsigned int countRef;
+  struct spinlock * countref_lk;
 };
 
 struct openfile systemFileTable[SYSTEM_OPEN_MAX];
 
 void openfileIncrRefCount(struct openfile *of) {
-  if (of!=NULL)
+  if (of!=NULL){
+    spinlock_acquire(&of->countref_lk);
     of->countRef++;
+    spinlock_release(&of->countref_lk);
+  }
 }
 
 //open and close syscalls
@@ -41,7 +46,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
 {
     int fd, i;
     struct vnode *v;
-    struct openfile *of=NULL;; 	
+    struct openfile *of=NULL;
     int result;
 
     //open file
@@ -67,6 +72,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     for (i=0; i<SYSTEM_OPEN_MAX; i++) {
       if (systemFileTable[i].vn==NULL) {
         of = &systemFileTable[i];
+        spinlock_init(&of->countref_lk);
         of->vn = v;
         of->offset = 0; // TODO: handle offset with append
         if(openflags && O_APPEND != 0){
@@ -80,20 +86,20 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     if (of==NULL) { 
         // no free slot in system open file table
         *errp = ENFILE;
-  }
-  else {
-    for (fd=STDERR_FILENO+1; fd<OPEN_MAX; fd++) {
-        if (curproc->fileTable[fd] == NULL) {
-            curproc->fileTable[fd] = of;
-	        return fd;
-      }
     }
-    // no free slot in process open file table
-    *errp = EMFILE;
-  }
+    else {
+        for (fd=STDERR_FILENO+1; fd<OPEN_MAX; fd++) {
+            if (curproc->fileTable[fd] == NULL) {
+                curproc->fileTable[fd] = of;
+                return fd;
+            }
+        }
+        // no free slot in process open file table
+        *errp = EMFILE;
+    }
   
-  vfs_close(v);
-  return -1;
+    vfs_close(v);
+    return -1;
 }
 
 int
@@ -117,9 +123,10 @@ sys_close(int fd){
     if (--of->countRef > 0) 
         return 0; // just decrement ref cnt
     vn = of->vn;
-    of->vn = NULL;
     if (vn==NULL) return -1;
-
+    of->vn = NULL;
+    spinlock_cleanup(&of->countref_lk);
+    
     vfs_close(vn);	
     return 0;
 }
@@ -190,7 +197,7 @@ file_read(int fd, userptr_t buf_ptr, size_t size) {
     //bytes_to_read is the lower between remaining and size
   
     //initialize iovec and uio
-    siov.iov_ubase = buf_ptr;
+    iov.iov_ubase = buf_ptr;
     iov.iov_len = bytes_to_read;
 
     u.uio_iov = &iov;
@@ -368,6 +375,28 @@ off_t sys_lseek(int fd, off_t pos, int whence){
     return file->offset;
 }
 
+//dup syscall
+
+int sys_dup(int oldfd){
+    int result, i;
+    int newfd=-1;
+
+    //check validity of oldfd
+    if(oldfd < 0 || oldfd >= __OPEN_MAX || curproc->fileTable[oldfd] == NULL){
+        return EBADF;
+    }
+
+    //find lower unused fd inside fileTable
+    for (i=0; i<OPEN_MAX; i++){
+        if(curproc->fileTable[i]==NULL){
+            newfd=i;
+            int err = fdtable_dup(oldfd,newfd);
+        }
+    }
+
+    return newfd;
+}
+
 
 //dup2 syscall
 
@@ -381,12 +410,17 @@ int sys_dup2(int oldfd, int newfd){
     }
     if(newfd == oldfd)
         return oldfd; //same fd (should be an error ?)
-    if(newfd < 0 || newfd >= __OPEN_MAX || curproc->fileTable[newfd] != NULL){
+    if(newfd < 0 || newfd >= __OPEN_MAX ){
         return EBADF;
     }
 
+    //if newfd already used, close corresponding file first
+    if(curproc->fileTable[newfd]!=NULL){
+        sys_close(newfd);
+    }
+
     //perform the dup2 
-    int err = fdtable_dup(curproc->fileTable,oldf,newfd);
+    int err = fdtable_dup(oldfd,newfd);
     if(err){
         return err;
     }
@@ -399,7 +433,7 @@ int fdtable_dup(int oldfd, int newfd){
     struct openfile * old_file;
     int err;
 
-    KASSERT(fdt != NULL);
+ //   KASSERT(fdt != NULL);
     KASSERT(oldfd >= 0 && oldfd <__OPEN_MAX);
     KASSERT(newfd >= 0 && newfd <__OPEN_MAX);
 
@@ -409,8 +443,11 @@ int fdtable_dup(int oldfd, int newfd){
         return EBADF;
     }
 
+    curproc->fileTable[newfd]=old_file;
+    openfileIncrRefCount(old_file);
+
     //allocate the new file
-    new_file = kmalloc(sizeof(struct openfile));
+ /*   new_file = kmalloc(sizeof(struct openfile));
     if(new_file == NULL){
         return ENOMEN;
     }
@@ -422,7 +459,7 @@ int fdtable_dup(int oldfd, int newfd){
         return err;
     }
 
-    curproc->fileTable[newfd] = new_file;
+    curproc->fileTable[newfd] = new_file; */
     return 0;
     
 }
@@ -466,7 +503,7 @@ int sys_chdir(userptr_t path){
 
     //open the directory
     struct vnode *newcwd;
-    result = vfs_ope(kbuf,O_READONLY,,0,&v);
+    result = vfs_open(kbuf,O_READONLY,0,&v);
     if(result){
         kfree(kbuf);
         return result;
