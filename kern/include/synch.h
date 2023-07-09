@@ -30,6 +30,8 @@
 #ifndef _SYNCH_H_
 #define _SYNCH_H_
 
+#define USE_SEMAPHORE_FOR_LOCK 1
+
 /*
  * Header file for synchronization primitives.
  */

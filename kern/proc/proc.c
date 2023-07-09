@@ -50,6 +50,8 @@
 #include <vnode.h>
 #include <syscall.h>
 #include <synch.h>
+#include <kern/wait.h>
+#include <kern/errno.h>
 
 
 #define MAX_PROC 100
@@ -433,17 +435,17 @@ proc_wait(struct proc *proc,int options)
 		if(options & WNOHANG){
 			return 0; //process didn't exit
 		}
-		if(options & WEXITED){
+		if(options & __WEXITED){
 			if(!WIFEXITED(return_status)){
 				return ECHILD; //child didn't exit normally
 			}
 		}
-		if(options & WSTOPPED){
+		if(options & __WSTOPPED){
 			if(!WIFSTOPPED(return_status)){
 				return ECHILD; //child didn't stopped
 			}
 		}
-		if(options & WSIGNALED){
+		if(options & __WSIGNALED){
 			if(!WIFSIGNALED(return_status)){
 				return ECHILD;//child not terminated by a signal
 			}
@@ -462,12 +464,17 @@ proc_signal_end(struct proc *proc)
 #endif
 }
 
-void curproc_cleanup(){
+void curproc_cleanup(void* dummy){
+	(void)dummy;
+	struct vnode * v;
+	struct openfile * of;
 
 	if(curproc->fileTable!=NULL){
-		for (int i = 0; i++;i< OPEN_MAX){
+		for (int i = 0; i< OPEN_MAX ; i++){
 			if(curproc->fileTable[i]!=NULL){
-				VOP_DECREF(curproc->fileTable[i]->vn);
+				of= curproc->fileTable[i];
+				v=of->vn;
+				VOP_DECREF(v);
 				kfree(curproc->fileTable[i]);
 				curproc->fileTable[i] = NULL;
 			}
@@ -475,6 +482,4 @@ void curproc_cleanup(){
 	}
 	kfree(curproc->fileTable);
 	proc_remthread(curthread);
-
-
 }

@@ -441,3 +441,9 @@ file		test/semunit.c
 file		test/kmalloctest.c
 file		test/fstest.c
 optfile net	test/nettest.c
+
+## project test ##
+
+defoption synch
+file        syscall/file_syscalls.c
+file        syscall/proc_syscalls.c

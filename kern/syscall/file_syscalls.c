@@ -13,31 +13,22 @@
 #include <proc.h>
 #include <kern/stat.h>
 #include <thread.h>
-#include <kern/include/syscall.h>
+#include <kern/syscall.h>
 #include <spinlock.h>
+#include <kern/fcntl.h>
+#include <kern/seek.h>
 
-/* max num of system wide open files */
-#define SYSTEM_OPEN_MAX (10*OPEN_MAX)
-
-#define USE_KERNEL_BUFFER 0
-
-/* system open file table */
-struct openfile {
-  struct vnode *vn;
-  off_t offset;	
-  unsigned int countRef;
-  struct spinlock * countref_lk;
-};
-
-struct openfile systemFileTable[SYSTEM_OPEN_MAX];
 
 void openfileIncrRefCount(struct openfile *of) {
   if (of!=NULL){
-    spinlock_acquire(&of->countref_lk);
+    spinlock_acquire(of->countref_lk);
     of->countRef++;
-    spinlock_release(&of->countref_lk);
+    spinlock_release(of->countref_lk);
   }
 }
+
+int fdtable_dup(int oldfd, int newfd);
+int file_dup(struct openfile * old_file,struct openfile * new_file);
 
 //open and close syscalls
 
@@ -57,8 +48,8 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
       }
 
     //saving stats about file in file_stat
-    struct stat = file_stat;
-    result = VOP_STAT(vn, &file_stat);
+    struct stat file_stat;
+    result = VOP_STAT(v, &file_stat);
     if(result){
       *errp = ENOENT;
       return -1;
@@ -72,7 +63,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     for (i=0; i<SYSTEM_OPEN_MAX; i++) {
       if (systemFileTable[i].vn==NULL) {
         of = &systemFileTable[i];
-        spinlock_init(&of->countref_lk);
+        spinlock_init(of->countref_lk);
         of->vn = v;
         of->offset = 0; // TODO: handle offset with append
         if(openflags && O_APPEND != 0){
@@ -125,7 +116,7 @@ sys_close(int fd){
     vn = of->vn;
     if (vn==NULL) return -1;
     of->vn = NULL;
-    spinlock_cleanup(&of->countref_lk);
+    spinlock_cleanup(of->countref_lk);
     
     vfs_close(vn);	
     return 0;
@@ -372,13 +363,13 @@ off_t sys_lseek(int fd, off_t pos, int whence){
             return EINVAL; //invalid whence value
     }
 
-    return file->offset;
+    return curproc->fileTable[fd]->offset;
 }
 
 //dup syscall
 
 int sys_dup(int oldfd){
-    int result, i;
+    int i;
     int newfd=-1;
 
     //check validity of oldfd
@@ -390,7 +381,8 @@ int sys_dup(int oldfd){
     for (i=0; i<OPEN_MAX; i++){
         if(curproc->fileTable[i]==NULL){
             newfd=i;
-            int err = fdtable_dup(oldfd,newfd);
+            int err= fdtable_dup(oldfd,newfd);
+            if(err) return err;
         }
     }
 
@@ -401,8 +393,6 @@ int sys_dup(int oldfd){
 //dup2 syscall
 
 int sys_dup2(int oldfd, int newfd){
-
-    int result;
 
     //check validity of the two file descriptors
     if(oldfd < 0 || oldfd >= __OPEN_MAX || curproc->fileTable[oldfd] == NULL){
@@ -429,9 +419,9 @@ int sys_dup2(int oldfd, int newfd){
 }
 
 int fdtable_dup(int oldfd, int newfd){
-    struct openfile * new_file;
+  //  struct openfile * new_file;
     struct openfile * old_file;
-    int err;
+  //  int err;
 
  //   KASSERT(fdt != NULL);
     KASSERT(oldfd >= 0 && oldfd <__OPEN_MAX);
@@ -503,14 +493,14 @@ int sys_chdir(userptr_t path){
 
     //open the directory
     struct vnode *newcwd;
-    result = vfs_open(kbuf,O_READONLY,0,&v);
+    result = vfs_open(kbuf,O_RDONLY,0,&newcwd);
     if(result){
         kfree(kbuf);
         return result;
     }
 
-    struct vnode * oldcwd = curthread->t_cwd;
-    curthread->t_cwd = newcwd;
+    struct vnode * oldcwd = curproc->p_cwd;
+    curproc->p_cwd = newcwd;
     vfs_close(oldcwd);
 
     kfree(kbuf);
@@ -521,42 +511,46 @@ int sys_chdir(userptr_t path){
 //getcwd syscall
 
 int sys_getcwd(userptr_t buf_ptr,size_t size){
+    struct uio u;
+    struct iovec iov;
     
     if(buf_ptr == NULL){
         return EFAULT;
     }
 
-    struct vnode *cwd = curthread->t_cwd;
-    if(cwd == NULL){
-        return EINVAL;
-    }
-
-    char *kbuf;
     int result;
     size_t len;
 
-    kbuf = kmalloc(PATH_MAX);
-    if(kbuf == NULL){
-        return ENOMEM;
-    }
+    iov.iov_ubase = buf_ptr;
+    iov.iov_len = PATH_MAX;
 
-    result = vfs_getcwd(kbuf,PATH_MAX,&len);
+    u.uio_iov = &iov;
+    u.uio_iovcnt = 1;
+    u.uio_resid = PATH_MAX;  
+    u.uio_offset = 0;
+    u.uio_segflg =UIO_USERISPACE;
+    u.uio_rw = UIO_READ;
+    u.uio_space = curproc->p_addrspace;
+
+    result = vfs_getcwd(&u);
     if(result){
-        kfree(kbuf);
+       // kfree(kbuf);
         return result;
     }
 
+    len= PATH_MAX - u.uio_resid;
+
     if(len+1 > size){
-        kfree(kbuf);
+      //  kfree(kbuf);
         return ENAMETOOLONG;
     }
 
-    result = copyoutstr(kbuf,buf_ptr,bufsize,NULL);
+ /*   result = copyoutstr(kbuf,buf_ptr,len,NULL);
     if(result){
         kfree(kbuf);
         return result;
     }
 
-    kfree(kbuf);
+    kfree(kbuf);*/
     return 0;
 }

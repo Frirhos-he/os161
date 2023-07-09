@@ -32,6 +32,8 @@
 
 
 #include <cdefs.h> /* for __DEAD */
+#include <types.h>
+
 struct trapframe; /* from <machine/trapframe.h> */
 
 /*
@@ -65,7 +67,8 @@ struct openfile;
 void openfileIncrRefCount(struct openfile *of);
 int sys_open(userptr_t path, int openflags, mode_t mode, int *errp);
 int sys_close(int fd);
-int sys_lseek(int fd, off_t pos, int whence);
+off_t sys_lseek(int fd, off_t pos, int whence);
+int sys_dup(int oldfd);
 int sys_dup2(int oldfd,int newfd);
 int sys_chdir(userptr_t path);
 int sys_getcwd(userptr_t buf_ptr,size_t size);

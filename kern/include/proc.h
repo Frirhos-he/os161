@@ -86,6 +86,21 @@ struct proc {
 	/* add more material here as needed */
 };
 
+/* max num of system wide open files */
+#define SYSTEM_OPEN_MAX (10*OPEN_MAX)
+
+#define USE_KERNEL_BUFFER 0
+
+/* system open file table */
+struct openfile {
+  struct vnode *vn;
+  off_t offset;	
+  unsigned int countRef;
+  struct spinlock * countref_lk;
+};
+
+struct openfile systemFileTable[SYSTEM_OPEN_MAX];
+
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
@@ -121,5 +136,6 @@ void proc_signal_end(struct proc *proc);
 /* get proc from pid */
 struct proc *proc_search_pid(pid_t pid);
 
-void curproc_cleanup();
+void curproc_cleanup(void* dummy);
+
 #endif /* _PROC_H_ */

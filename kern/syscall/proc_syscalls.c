@@ -1,4 +1,5 @@
 #include <types.h>
+#include <spl.h>
 #include <kern/unistd.h>
 #include <kern/errno.h>
 #include <clock.h>
@@ -11,6 +12,15 @@
 #include <mips/trapframe.h>
 #include <current.h>
 #include <synch.h>
+#include <vfs.h>
+#include <vnode.h>
+#include <kern/fcntl.h>
+#include <kern/seek.h>
+
+int copyin_args(const char *progname, char **args, int num_args, char **kargs);
+int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr);
+void enter_new_process_(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr);
+
 
 void
 sys__exit(int status)
@@ -25,10 +35,11 @@ sys__exit(int status)
     cv_signal(p->p_cv);
     lock_release(p->p_lock);
 #endif
-    thread_exit(status);
+    thread_exit();
 
     panic("thread_exit returned (should not happen)\n");
 }
+
 int
 sys_waitpid(pid_t pid, userptr_t statusp, int options)
 {
@@ -179,7 +190,7 @@ int sys_execv(const char * progname, char ** args){
     kfree(args);
 
     //warp to user mode
-    enter_new_process(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
+    enter_new_process_(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
 
     //enter_new_process does not return
     panic("enter new process returne\n");
@@ -188,10 +199,10 @@ int sys_execv(const char * progname, char ** args){
 
 int copyin_args(const char *progname, char **args, int num_args, char **kargs){
     
-    int result,i;
+    int result,i,j;
     
     //copy programname
-    result = copyinstr((const userptr_t)progname,kargs,PATH_MAX,NULL);
+    result = copyinstr((const userptr_t)progname,kargs[0],PATH_MAX,NULL);
     if(result){
         return result;
     }
@@ -204,7 +215,7 @@ int copyin_args(const char *progname, char **args, int num_args, char **kargs){
             for (j = 0 ; j<i+1;j++){
                 kfree(kargs[j]);
             }
-            return ENOMEM
+            return ENOMEM;
         }
 
         result = copyinstr((const userptr_t)args[i],kargs[i+1],ARG_MAX,NULL);
@@ -247,12 +258,16 @@ int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr){
     return 0;
 }
 
-void enter_new_process(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr){
+void enter_new_process_(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr){
+
+    (void)argc;
+    (void)stacktop;
+    (void)entryaddr;
 
     struct trapframe tf;
     struct addrspace *as;
-    struct proc *cur;
     int spl;
+    int err;
 
     (void)entrypoint;//not used in this implementation
 
@@ -260,12 +275,12 @@ void enter_new_process(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t
     as = proc_setas(NULL);
     as_destroy(as);
 
-    curproc_cleanup();
+    curproc_cleanup((void*)NULL);
 
     spl = splhigh(); //disable interrupts temporarily
 
     //copy the contents of the trapframe from the stack pointer to the local trapframe
-    tf = *(struct trapframe)stackptr;
+    tf = *(struct trapframe*)stackptr;
     kfree((void*)stackptr);
 
     //update the registers of the child's trapframe
@@ -274,13 +289,14 @@ void enter_new_process(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t
     tf.tf_epc +=4;
 
     //activate the new process' addres space
-    as = as_copy(curproc->p_addrspace)
-    if(as == NULL){
-        return;
+    err= as_copy(curproc->p_addrspace,&as);
+    if(err){
+        panic("enter_new_process: error on as copy\n");
     }
+    splx(spl);
     proc_setas(as);
     as_activate();
-    call_enter_forked_process((void*)tf,(unsigned long)0 /*unused*/);
+    call_enter_forked_process((void*)&tf,(unsigned long)0 /*unused*/);
 
     panic("enter_new_process: enter_forked_process returned\n");
 

@@ -35,7 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-
+#include <addrspace.h>
 
 /*
  * System call dispatcher.
@@ -177,7 +177,7 @@ syscall(struct trapframe *tf)
 				err = 0;
 			break;
 
-		case SYS_getcwd:
+		case SYS___getcwd:
 			retval = sys_getcwd((userptr_t)tf->tf_a0,(size_t)tf->tf_a1);
 			if(retval<0)
 				err = retval;
@@ -257,11 +257,6 @@ syscall(struct trapframe *tf)
  *
  * Thus, you can trash it and do things another way if you prefer.
  */
-void
-enter_forked_process(struct trapframe *tf)
-{
-	(void)tf;
-}
 
 void
 enter_forked_process(struct trapframe *tf)

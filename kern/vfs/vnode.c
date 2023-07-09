@@ -160,9 +160,9 @@ vnode_check(struct vnode *v, const char *opstr)
 		panic("vnode_check: vop_%s: deadbeef fs pointer\n", opstr);
 	}
 
-	if(v->vn_len == NULL || v->vn_len < 0){
-		panic("vnode:check: vop_%s: ops with wrong len",opstr);
-	}
+//	if(v->vn_len == 0 || v->vn_len < 0){
+//		panic("vnode:check: vop_%s: ops with wrong len",opstr);
+//	}
 
 	spinlock_acquire(&v->vn_countlock);
 
