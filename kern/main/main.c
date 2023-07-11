@@ -51,6 +51,8 @@
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
 
+#include "hello.h"
+
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -100,6 +102,10 @@ boot(void)
 	kprintf("OS/161 base system version %s\n", BASE_VERSION);
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
+	
+	#if OPT_HELLO
+	hello();
+	#endif
 
 	kprintf("Put-your-group-name-here's system version %s (%s #%d)\n",
 		GROUP_VERSION, buildconfig, buildversion);
@@ -209,6 +215,9 @@ void
 kmain(char *arguments)
 {
 	boot();
+#if OPT_HELLO
+	hello();
+#endif
 
 	menu(arguments);
 

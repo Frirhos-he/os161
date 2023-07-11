@@ -214,7 +214,6 @@ int
 sys_read(int fd, userptr_t buf_ptr, size_t size)
 {
   int i;
-  char *p = (char *)buf_ptr;
 
   //reading a file
   if (fd!=STDIN_FILENO) {
@@ -222,11 +221,22 @@ sys_read(int fd, userptr_t buf_ptr, size_t size)
   }
 
   //stdin
-  for (i=0; i<(int)size; i++) {
-    p[i] = getch();
-    if (p[i] < 0) 
-      return i;
+  char* temp_buf= kmalloc((size+1)*sizeof(char));
+  if(temp_buf==NULL){
+    return -1;
   }
+
+  for (i=0; i<(int)size; i++) {
+    temp_buf[i] = getch();
+    if (temp_buf[i] < 0){
+      temp_buf[i]='\0';
+      int result= copyout(temp_buf,(userptr_t)buf_ptr,(size_t)(i+1));
+      return result;
+    }
+  }
+  temp_buf[size]='\0';
+  copyout(temp_buf,(userptr_t)buf_ptr,size+1);
+  kfree(temp_buf);
 
   return (int)size;
 }
@@ -325,18 +335,23 @@ int
 sys_write(int fd, userptr_t buf_ptr, size_t size)
 {
     int i;
-    char *p = (char *)buf_ptr;
 
     //write into a file
     if (fd!=STDOUT_FILENO && fd!=STDERR_FILENO) {
         return file_write(fd, buf_ptr, size);
     }
 
+    
     //write to stdout ot stderr
+    char* temp_buf= kmalloc((size+1)*sizeof(char));
+    if(temp_buf==NULL){
+    return -1;
+    }
+    copyin((userptr_t)buf_ptr, temp_buf, size+1);
     for (i=0; i<(int)size; i++) {
-        putch(p[i]);
+        putch(temp_buf[i]);
         }
-
+    kfree(temp_buf);
     return (int)size;
 }
 

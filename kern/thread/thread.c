@@ -149,8 +149,6 @@ thread_create(const char *name)
 
 	/* If you add to struct thread, be sure to initialize here */
 
-    thread->t_return = 0;
-
 	return thread;
 }
 
@@ -463,7 +461,7 @@ thread_make_runnable(struct thread *target, bool already_have_lock)
 		KASSERT(spinlock_do_i_hold(&targetcpu->c_runqueue_lock));
 	}
 	else {
-		spinlock_acquire(&targetcpu->c_runqueue_lock);
+		spinlock_acquire(&targetcpu->c_runqueue_lock);		// cannot acquire twice
 	}
 
 	/* Target thread is now ready to run; put it on the run queue. */
@@ -475,11 +473,11 @@ thread_make_runnable(struct thread *target, bool already_have_lock)
 		 * Other processor is idle; send interrupt to make
 		 * sure it unidles.
 		 */
-		ipi_send(targetcpu, IPI_UNIDLE);
+		ipi_send(targetcpu, IPI_UNIDLE); 	// inform target cpu runnable threads are available. if target==cur it is already unidle.
 	}
 
 	if (!already_have_lock) {
-		spinlock_release(&targetcpu->c_runqueue_lock);
+		spinlock_release(&targetcpu->c_runqueue_lock);		// the calling thread owns the lock, it has to be the one to unlock
 	}
 }
 
@@ -570,7 +568,7 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	DEBUGASSERT(curthread->t_cpu == curcpu->c_self);
 
 	/* Explicitly disable interrupts on this processor */
-	spl = splhigh();
+	spl = splhigh();	// set interrupt priority level to the higher possible in order to disable all interrupts
 
 	cur = curthread;
 
@@ -579,7 +577,7 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	 * when the timer interrupt interrupts the idle loop.
 	 */
 	if (curcpu->c_isidle) {
-		splx(spl);
+		splx(spl);		// restore previous interrupt priority level
 		return;
 	}
 
@@ -601,7 +599,7 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	    case S_RUN:
 		panic("Illegal S_RUN in thread_switch\n");
 	    case S_READY:
-		thread_make_runnable(cur, true /*have lock*/);
+		thread_make_runnable(cur, true /*have lock*/);		// insert curthread in the runqueue of curcpu and set its state to ready
 		break;
 	    case S_SLEEP:
 		cur->t_wchan_name = wc->wc_name;
@@ -653,14 +651,14 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	curcpu->c_isidle = false;
 
 	/*
-	 * Note that curcpu->c_curthread may be the same variable as
+	 * Note that curcpu->c_curthread may be the same varriable as
 	 * curthread and it may not be, depending on how curthread and
 	 * curcpu are defined by the MD code. We'll assign both and
 	 * assume the compiler will optimize one away if they're the
 	 * same.
 	 */
 	curcpu->c_curthread = next;
-	curthread = next;
+	curthread = next;	
 
 	/* do the switch (in assembler in switch.S) */
 	switchframe_switch(&cur->t_context, &next->t_context);
@@ -690,7 +688,7 @@ thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
 	 *      switchframe_switch.
 	 *
 	 *    - If newstate is S_ZOMB we never get back here in that
-	 *      context at all.
+	 *      context at all.	(it's moved to the zombie queue)
 	 *
 	 *    - If the thread just chosen to run ("next") was a new
 	 *      thread, we don't get to this code again until
@@ -778,19 +776,20 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
  * Does not return.
  */
 void
-thread_exit()
+thread_exit(void)
 {
 	struct thread *cur;
 
 	cur = curthread;
 
-  //  cur->t_return = ret;
 	/*
 	 * Detach from our process. You might need to move this action
 	 * around, depending on how your wait/exit works.
 	 */
-	if (cur->t_proc!=NULL)
-	  proc_remthread(cur);
+	if(cur->t_proc != NULL){
+		proc_remthread(cur);
+	}
+	
 
 	/* Make sure we *are* detached (move this only if you're sure!) */
 	KASSERT(cur->t_proc == NULL);
@@ -799,7 +798,7 @@ thread_exit()
 	thread_checkstack(cur);
 
 	/* Interrupts off on this processor */
-    splhigh();
+        splhigh();
 	thread_switch(S_ZOMBIE, NULL, NULL);
 	panic("braaaaaaaiiiiiiiiiiinssssss\n");
 }

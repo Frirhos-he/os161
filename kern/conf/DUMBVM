@@ -32,3 +32,7 @@ options sfs			# Always use the file system
 #options netfs			# You might write this as a project.
 
 options dumbvm			# Chewing gum and baling wire.
+options syscalls
+options synch
+options waitpid
+options fork

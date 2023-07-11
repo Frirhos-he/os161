@@ -30,6 +30,8 @@
 #ifndef _KERN_IOVEC_H_
 #define _KERN_IOVEC_H_
 
+#define _KERNEL 1
+
 /*
  * iovec structure, used in the readv/writev scatter/gather I/O calls,
  * and within the kernel for keeping track of blocks of data for I/O.
@@ -54,7 +56,7 @@ struct iovec {
 	 * true are theoretically possible under the C standard, but
 	 * do not exist in practice.
 	 */
-#ifdef _KERNEL
+#if _KERNEL
         union {
                 userptr_t  iov_ubase;	/* user-supplied pointer */
                 void      *iov_kbase;	/* kernel-supplied pointer */

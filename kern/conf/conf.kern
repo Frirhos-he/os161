@@ -442,8 +442,16 @@ file		test/kmalloctest.c
 file		test/fstest.c
 optfile net	test/nettest.c
 
-## project test ##
+defoption syscalls
+optfile syscalls syscall/file_syscalls.c 
+optfile syscalls syscall/proc_syscalls.c
+
+defoption hello
+optfile hello   main/hello.c
 
 defoption synch
-file        syscall/file_syscalls.c
-file        syscall/proc_syscalls.c
+optfile synch thread/synch.c 
+
+defoption waitpid
+defoption fork
+

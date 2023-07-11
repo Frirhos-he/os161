@@ -31,7 +31,6 @@
 #define _VNODE_H_
 
 #include <spinlock.h>
-#include <types.h>
 struct uio;
 struct stat;
 
@@ -60,7 +59,6 @@ struct vnode {
 	const struct vnode_ops *vn_ops; /* Functions on this vnode */
 
 	off_t vn_len;                   /*Length of the file represented by the vnode*/
-
 };
 
 /*

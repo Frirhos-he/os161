@@ -116,13 +116,15 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
   return 0;
 }
 
-int sys_execv(const char * progname, char ** args){
+int sys_execv( char * progname, char ** args){
 
     struct addrspace *as;
     struct vnode *v;
 
     vaddr_t entrypoint,stackptr;
     int result;
+
+    progname=progname+1;
 
     int num_args = 0;
     while(args[num_args] != NULL){
@@ -149,6 +151,9 @@ int sys_execv(const char * progname, char ** args){
         return result;
     }
     //create a new address space
+    as = proc_getas();
+    as_destroy(as);
+
     as = as_create();
     if(as == NULL){
         vfs_close(v);
@@ -158,7 +163,7 @@ int sys_execv(const char * progname, char ** args){
 
     //switch to the new address space
     proc_setas(as);
-    as_activate();
+    as_activate(); 
 
     //load the executable
 
@@ -171,6 +176,7 @@ int sys_execv(const char * progname, char ** args){
 
     //done with the file
     vfs_close(v);
+
 
     //define the user stack in the address space
     result = as_define_stack(as,&stackptr);
@@ -185,15 +191,16 @@ int sys_execv(const char * progname, char ** args){
         kfree(args);
         return result;
     }
-
+/*
     //free the kernel-space argument array
-    kfree(args);
+  //  kfree(args);
 
     //warp to user mode
-    enter_new_process_(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
+    enter_new_process_(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);*/
+    enter_new_process(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
 
     //enter_new_process does not return
-    panic("enter new process returne\n");
+    panic("enter new process returned\n");
     return EINVAL;
 }
 

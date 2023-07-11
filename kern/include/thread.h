@@ -106,9 +106,7 @@ struct thread {
 	 * Public fields
 	 */
 
-    int t_return; //return value
 	/* add more here as needed */
-	
 };
 
 /*

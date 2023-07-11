@@ -547,13 +547,6 @@ emufs_read(struct vnode *v, struct uio *uio)
 
 	KASSERT(uio->uio_rw==UIO_READ);
 
-	if(uio->uio_offset >= v->vn_len)
-		return 0; //end of file reached
-	
-	off_t remaining =v->vn_len - uio->uio_offset;
-	if(uio->uio_resid > remaining)
-		uio->uio_resid = remaining;
-
 	while (uio->uio_resid > 0) {
 		amt = uio->uio_resid;
 		if (amt > EMU_MAXIO) {
@@ -619,10 +612,6 @@ emufs_write(struct vnode *v, struct uio *uio)
 		oldresid = uio->uio_resid;
 
 		result = emu_write(ev->ev_emu, ev->ev_handle, amt, uio);
-
-		if(uio->uio_offset > v->vn_len)
-			uio->uio_offset = v->vn_len;
-
 		if (result) {
 			return result;
 		}
