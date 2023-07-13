@@ -17,7 +17,7 @@
 #include <kern/fcntl.h>
 #include <kern/seek.h>
 
-int copyin_args(const char *progname, char **args, int num_args, char **kargs);
+int copyin_args(const char *progname, userptr_t **args, int num_args, char **kargs);
 int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr);
 void enter_new_process_(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr);
 
@@ -116,15 +116,17 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
   return 0;
 }
 
-int sys_execv( char * progname, char ** args){
+int sys_execv( char * progname, char * args[]){
 
     struct addrspace *as;
     struct vnode *v;
-
     vaddr_t entrypoint,stackptr;
     int result;
 
-    progname=progname+1;
+    //progname=progname+1;
+    //BRUNO: Casting
+    userptr_t prog = (userptr_t) progname;
+    userptr_t uargv = (userptr_t) args;
 
     int num_args = 0;
     while(args[num_args] != NULL){
@@ -136,10 +138,12 @@ int sys_execv( char * progname, char ** args){
         return ENOMEM;
     }
 
-    result = copyin_args(progname,args,num_args,kargs);
+    //result = copyin_args(progname,args,num_args,kargs);
+    result = copyin_args(prog,uargv,num_args,kargs);
+
 
     if(result){
-        kfree(args);
+        kfree(args); //why must be freed inside this function?
         return result;
     }
 
@@ -204,19 +208,22 @@ int sys_execv( char * progname, char ** args){
     return EINVAL;
 }
 
-int copyin_args(const char *progname, char **args, int num_args, char **kargs){
+int copyin_args(const char *progname, userptr_t **args, int num_args, char **kargs){
     
     int result,i,j;
     
+    kargs[0] = kmalloc((strlen(progname)+1)*sizeof(char));
+    if(kargs[0] == NULL) return ENOMEM;
+
     //copy programname
-    result = copyinstr((const userptr_t)progname,kargs[0],PATH_MAX,NULL);
+    result = copyinstr((const userptr_t)progname,kargs[0],(strlen(progname)+1)*sizeof(char),NULL);
     if(result){
         return result;
     }
 
     //copy arguments
     for(i = 0; i < num_args; i++){
-        kargs[i+1] = kmalloc(ARG_MAX);
+        kargs[i+1] = kmalloc((strlen(args[i])+1)*sizeof(char));
 
         if(kargs[i+1] == NULL){
             for (j = 0 ; j<i+1;j++){
@@ -225,7 +232,7 @@ int copyin_args(const char *progname, char **args, int num_args, char **kargs){
             return ENOMEM;
         }
 
-        result = copyinstr((const userptr_t)args[i],kargs[i+1],ARG_MAX,NULL);
+        result = copyinstr((const userptr_t)args[i],kargs[i+1],(strlen(args[i])+1)*sizeof(char),NULL);
         if(result){
             for (j = 0 ; j<i+1;j++){
                 kfree(kargs[j]);
