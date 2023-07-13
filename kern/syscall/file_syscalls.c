@@ -534,14 +534,14 @@ int sys_getcwd(userptr_t buf_ptr,size_t size){
     }
 
     int result;
-    size_t len;
+  //  size_t len;
 
     iov.iov_ubase = buf_ptr;
-    iov.iov_len = PATH_MAX;
+    iov.iov_len = size;
 
     u.uio_iov = &iov;
     u.uio_iovcnt = 1;
-    u.uio_resid = PATH_MAX;  
+    u.uio_resid = size;  
     u.uio_offset = 0;
     u.uio_segflg =UIO_USERISPACE;
     u.uio_rw = UIO_READ;
@@ -553,12 +553,12 @@ int sys_getcwd(userptr_t buf_ptr,size_t size){
         return result;
     }
 
-    len= PATH_MAX - u.uio_resid;
+   // len= size - u.uio_resid;
 
-    if(len+1 > size){
+  //  if(len+1 > size){
       //  kfree(kbuf);
-        return ENAMETOOLONG;
-    }
+   //     return ENAMETOOLONG;
+   // }
 
  /*   result = copyoutstr(kbuf,buf_ptr,len,NULL);
     if(result){

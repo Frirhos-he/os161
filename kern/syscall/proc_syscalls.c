@@ -17,7 +17,7 @@
 #include <kern/fcntl.h>
 #include <kern/seek.h>
 
-int copyin_args(const char *progname, userptr_t **args, int num_args, char **kargs);
+int copyin_args(const char *progname, char **args, int num_args, char **kargs);
 int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr);
 void enter_new_process_(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr);
 
@@ -124,9 +124,7 @@ int sys_execv( char * progname, char * args[]){
     int result;
 
     //progname=progname+1;
-    //BRUNO: Casting
-    userptr_t prog = (userptr_t) progname;
-    userptr_t uargv = (userptr_t) args;
+
 
     int num_args = 0;
     while(args[num_args] != NULL){
@@ -138,9 +136,8 @@ int sys_execv( char * progname, char * args[]){
         return ENOMEM;
     }
 
-    //result = copyin_args(progname,args,num_args,kargs);
-    result = copyin_args(prog,uargv,num_args,kargs);
-
+    result = copyin_args(progname,args,num_args,kargs);
+    
 
     if(result){
         kfree(args); //why must be freed inside this function?
@@ -208,10 +205,10 @@ int sys_execv( char * progname, char * args[]){
     return EINVAL;
 }
 
-int copyin_args(const char *progname, userptr_t **args, int num_args, char **kargs){
+int copyin_args(const char *progname, char **args, int num_args, char **kargs){
     
     int result,i,j;
-    
+
     kargs[0] = kmalloc((strlen(progname)+1)*sizeof(char));
     if(kargs[0] == NULL) return ENOMEM;
 
@@ -232,7 +229,7 @@ int copyin_args(const char *progname, userptr_t **args, int num_args, char **kar
             return ENOMEM;
         }
 
-        result = copyinstr((const userptr_t)args[i],kargs[i+1],(strlen(args[i])+1)*sizeof(char),NULL);
+        result = copyinstr((const userptr_t) args[i],kargs[i+1],(strlen(args[i])+1)*sizeof(char),NULL);
         if(result){
             for (j = 0 ; j<i+1;j++){
                 kfree(kargs[j]);
