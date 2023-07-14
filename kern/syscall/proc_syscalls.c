@@ -42,7 +42,7 @@ sys__exit(int status)
     panic("thread_exit returned (should not happen)\n");
 }
 
-int
+pid_t
 sys_waitpid(pid_t pid, userptr_t statusp, int options)
 {
     struct proc *p = proc_search_pid(pid);
