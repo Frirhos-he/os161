@@ -63,6 +63,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     for (i=0; i<SYSTEM_OPEN_MAX; i++) {
       if (systemFileTable[i].vn==NULL) {
         of = &systemFileTable[i];
+        of->countref_lk=kmalloc(sizeof(struct spinlock));
         spinlock_init(of->countref_lk);
         of->vn = v;
         of->offset = 0; // TODO: handle offset with append
@@ -85,10 +86,15 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
                 return fd;
             }
         }
-        // no free slot in process open file table
-        *errp = EMFILE;
+        
+        
     }
-  
+    // no free slot in process open file table
+    *errp = EMFILE;
+    of->vn = NULL;
+    spinlock_cleanup(of->countref_lk);
+    kfree(of->countref_lk);
+    vfs_close(v);	
     vfs_close(v);
     return -1;
 }
@@ -117,7 +123,7 @@ sys_close(int fd){
     if (vn==NULL) return -1;
     of->vn = NULL;
     spinlock_cleanup(of->countref_lk);
-    
+    kfree(of->countref_lk);
     vfs_close(vn);	
     return 0;
 }
@@ -212,7 +218,7 @@ file_read(int fd, userptr_t buf_ptr, size_t size) {
 
 int
 sys_read(int fd, userptr_t buf_ptr, size_t size)
-{
+ {
   int i;
 
   //reading a file
@@ -221,7 +227,7 @@ sys_read(int fd, userptr_t buf_ptr, size_t size)
   }
 
   //stdin
-  char* temp_buf= kmalloc((size+1)*sizeof(char));
+  char* temp_buf= kmalloc((size)*sizeof(char));
   if(temp_buf==NULL){
     return -1;
   }
@@ -229,13 +235,13 @@ sys_read(int fd, userptr_t buf_ptr, size_t size)
   for (i=0; i<(int)size; i++) {
     temp_buf[i] = getch();
     if (temp_buf[i] < 0){
-      temp_buf[i]='\0';
-      int result= copyout(temp_buf,(userptr_t)buf_ptr,(size_t)(i+1));
+     // temp_buf[i]='\0';
+      int result= copyout(temp_buf,(userptr_t)buf_ptr,(size_t)i);
       return result;
     }
   }
-  temp_buf[size]='\0';
-  copyout(temp_buf,(userptr_t)buf_ptr,size+1);
+ // temp_buf[size]='\0';
+  copyout(temp_buf,(userptr_t)buf_ptr,size);
   kfree(temp_buf);
 
   return (int)size;
@@ -534,7 +540,6 @@ int sys_getcwd(userptr_t buf_ptr,size_t size){
     }
 
     int result;
-  //  size_t len;
 
     iov.iov_ubase = buf_ptr;
     iov.iov_len = size;
@@ -549,23 +554,9 @@ int sys_getcwd(userptr_t buf_ptr,size_t size){
 
     result = vfs_getcwd(&u);
     if(result){
-       // kfree(kbuf);
         return result;
     }
 
-   // len= size - u.uio_resid;
 
-  //  if(len+1 > size){
-      //  kfree(kbuf);
-   //     return ENAMETOOLONG;
-   // }
-
- /*   result = copyoutstr(kbuf,buf_ptr,len,NULL);
-    if(result){
-        kfree(kbuf);
-        return result;
-    }
-
-    kfree(kbuf);*/
-    return 0;
+    return size;
 }

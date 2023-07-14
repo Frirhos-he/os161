@@ -119,5 +119,4 @@ sys161 * arch/sys161/main/start.S
 * * test/semunit.c
 * * test/kmalloctest.c
 * * test/fstest.c
-* * ../userland/sh/sh.c
 * * compile/DUMBVM/autoconf.c

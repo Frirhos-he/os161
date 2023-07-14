@@ -140,7 +140,6 @@ defoption synch
 optfile synch thread/synch.c 
 defoption waitpid
 defoption fork
-file        ../userland/sh/sh.c
 debug				
 device lamebus0			
 device emu* at lamebus*		

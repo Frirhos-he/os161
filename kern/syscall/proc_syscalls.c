@@ -17,9 +17,11 @@
 #include <kern/fcntl.h>
 #include <kern/seek.h>
 
+
 int copyin_args(const char *progname, char **args, int num_args, char **kargs);
-int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr);
+int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr, vaddr_t * ptr_argv);
 void enter_new_process_(int argc,userptr_t stackptr,userptr_t entrypoint, vaddr_t stacktop, vaddr_t entryaddr);
+void rounddown(vaddr_t* stackptr, size_t sz );
 
 
 void
@@ -120,10 +122,8 @@ int sys_execv( char * progname, char * args[]){
 
     struct addrspace *as;
     struct vnode *v;
-    vaddr_t entrypoint,stackptr;
+    vaddr_t entrypoint,stackptr, ptr_argv;
     int result;
-
-    //progname=progname+1;
 
 
     int num_args = 0;
@@ -140,15 +140,16 @@ int sys_execv( char * progname, char * args[]){
     
 
     if(result){
-        kfree(args); //why must be freed inside this function?
+        kfree(kargs);
         return result;
     }
+    curproc->p_name=kargs[0];
 
     //open the executable file
     result = vfs_open(kargs[0],O_RDONLY,0,&v);
 
     if(result){
-        kfree(args);
+        kfree(kargs);
         return result;
     }
     //create a new address space
@@ -158,7 +159,7 @@ int sys_execv( char * progname, char * args[]){
     as = as_create();
     if(as == NULL){
         vfs_close(v);
-        kfree(args);
+        kfree(kargs);
         return ENOMEM;
     }
 
@@ -171,7 +172,7 @@ int sys_execv( char * progname, char * args[]){
     result = load_elf(v,&entrypoint);
     if(result){
         vfs_close(v);
-        kfree(args);
+        kfree(kargs);
         return result;
     }
 
@@ -182,23 +183,18 @@ int sys_execv( char * progname, char * args[]){
     //define the user stack in the address space
     result = as_define_stack(as,&stackptr);
     if(result){
-        kfree(args);
+        kfree(kargs);
         return result;
     }
 
     //copy arguments to the user stack
-    result = copyout_args(kargs,num_args,&stackptr);
+    result = copyout_args(kargs,num_args,&stackptr, &ptr_argv);
     if(result){
-        kfree(args);
+        kfree(kargs);
         return result;
     }
-/*
-    //free the kernel-space argument array
-  //  kfree(args);
-
-    //warp to user mode
-    enter_new_process_(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);*/
-    enter_new_process(num_args,(userptr_t)stackptr,NULL,stackptr,entrypoint);
+    kfree(kargs);
+    enter_new_process(num_args,(userptr_t)ptr_argv,NULL,stackptr,entrypoint);
 
     //enter_new_process does not return
     panic("enter new process returned\n");
@@ -242,12 +238,19 @@ int copyin_args(const char *progname, char **args, int num_args, char **kargs){
     return 0;
 
 }
-int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr){
+
+void rounddown(vaddr_t* stackptr, size_t sz ){
+    *stackptr= ((*stackptr)/sz)*sz;
+}
+
+
+
+int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr, vaddr_t * ptr_argv){
     int result,i;
-    vaddr_t argv[num_args+1];
+    vaddr_t argv[num_args];
 
     //copy arguments to user stack in reverse order
-    for (i = num_args -1; i >= 0; i--){
+    for (i = num_args ; i >=1; i--){
 
         size_t arglen = strlen(kargs[i])+1;
         //align the stack pointer
@@ -256,16 +259,18 @@ int copyout_args(char ** kargs, int num_args, vaddr_t * stackptr){
         if(result){
             return result;
         }
-        argv[i] = *stackptr;
+        argv[i-1] = *stackptr;
     }
 
     //copy argument pointers to user stack
-    *stackptr -= ROUNDUP ((num_args+1)*sizeof(void*),sizeof(void*));
-    result = copyout(argv,(userptr_t)(*stackptr),(num_args+1)*sizeof(void*));
+    *stackptr -= ROUNDUP ((num_args)*sizeof(void*),sizeof(void*));
+    result = copyout(argv,(userptr_t)(*stackptr),(num_args)*sizeof(void*));
     if(result){
-        return result;
+            return result;
     }
-
+    *ptr_argv=*stackptr;
+    rounddown(stackptr,2*sizeof(void*));
+   
     return 0;
 }
 

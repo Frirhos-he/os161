@@ -374,7 +374,7 @@ docommand(char *buf, struct exitinfo *ei)
 	int bg=0;
 	time_t startsecs, endsecs;
 	unsigned long startnsecs, endnsecs;
-
+	
 	nargs = 0;
 	for (s = strtok(buf, " \t\r\n"); s; s = strtok(NULL, " \t\r\n")) {
 		if (nargs >= NARG_MAX) {
@@ -485,8 +485,8 @@ docommand(char *buf, struct exitinfo *ei)
  * in the buffer, putchars an alert (bell).
  */
 static
-void
-getcmd(char *buf, size_t len)
+void getcmd(char* buf, size_t len)
+
 {
 	size_t pos = 0;
 	int done=0, ch;
@@ -494,7 +494,7 @@ getcmd(char *buf, size_t len)
 	/*
 	 * In the absence of a <ctype.h>, assume input is 7-bit ASCII.
 	 */
-    
+
 	while (!done) {
 		ch = getchar();
 		if ((ch == '\b' || ch == 127) && pos > 0) {
