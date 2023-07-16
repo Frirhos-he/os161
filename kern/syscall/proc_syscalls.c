@@ -141,7 +141,13 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
 #if PC_LINK
     // linking parent and child, so that child terminated on parent exit
     curproc->num_children++;
-    curproc->children[curproc->num_children-1]= newp;
+
+    struct proc* child;
+
+	for (int i=0; i<MAX_CHILDREN; i++){
+		child= p->children[i];
+		if(child==NULL) curproc->children[i]= newp;
+	}
 #endif
     /* done here as we need to duplicate the address space 
        of the current process */
