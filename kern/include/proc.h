@@ -62,6 +62,10 @@ struct vnode;
  */
 
 #define USE_SEMAPHORE_FOR_WAITPID 1
+#define MAX_CHILDREN 5
+#define MAX_THREADS 5
+#define PC_LINK 1
+
 struct proc {
 	char *p_name;			/* Name of this process */
 	struct spinlock p_lock;		/* Lock for this structure */
@@ -83,7 +87,12 @@ struct proc {
     struct cv *p_cv;
     struct lock *p_lock;
 #endif
-	/* add more material here as needed */
+#if PC_LINK
+	struct thread* p_threads[MAX_THREADS];
+	int num_children;
+	struct proc* children[MAX_CHILDREN];
+	struct proc* parent;
+#endif
 };
 
 /* max num of system wide open files */
@@ -137,5 +146,13 @@ void proc_signal_end(struct proc *proc);
 struct proc *proc_search_pid(pid_t pid);
 
 void curproc_cleanup(void* dummy);
+
+#if PC_LINK
+/* force all children to exit on parent process exit */
+void kill_children(struct proc* p);
+
+/* as sys_exit but suited on parent-child link control*/
+void exit_process(struct proc* p);
+#endif
 
 #endif /* _PROC_H_ */

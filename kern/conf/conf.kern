@@ -454,4 +454,5 @@ optfile synch thread/synch.c
 
 defoption waitpid
 defoption fork
+defoption project
 

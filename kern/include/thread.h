@@ -169,5 +169,7 @@ void schedule(void);
  */
 void thread_consider_migration(void);
 
+void thread_destroy(struct thread *thread);
+
 
 #endif /* _THREAD_H_ */

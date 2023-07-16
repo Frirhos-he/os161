@@ -157,6 +157,15 @@ proc_create(const char *name)
 
     bzero(proc->fileTable,OPEN_MAX*sizeof(struct openfile *));
 
+#if PC_LINK
+	if(!strcmp(proc->p_name,"[kernel]")) proc->parent=NULL;
+	else proc->parent=curproc;
+
+	proc->num_children=0;
+	bzero(proc->p_threads,MAX_THREADS*sizeof(struct thread *));
+    bzero(proc->children,MAX_CHILDREN*sizeof(struct proc *));
+#endif
+
 	return proc;
 }
 
@@ -319,6 +328,18 @@ proc_addthread(struct proc *proc, struct thread *t)
 
 	spinlock_acquire(&proc->p_lock);
 	proc->p_numthreads++;
+
+#if PC_LINK
+	struct thread* t1;
+	for(int i=0; i<MAX_THREADS; i++){
+		t1= proc->p_threads[i];
+		if(t1==NULL){
+			proc->p_threads[i]=t;
+			break;
+		}
+	}
+#endif
+	
 	spinlock_release(&proc->p_lock);
 
 	spl = splhigh();
@@ -349,8 +370,18 @@ proc_remthread(struct thread *t)
 	spinlock_acquire(&proc->p_lock);
 	KASSERT(proc->p_numthreads > 0);
 	proc->p_numthreads--;
-	spinlock_release(&proc->p_lock);
+	
+	
+#if PC_LINK
+	struct thread* t1;
+	for(int i=0; i<MAX_THREADS;i++){
+		t1= proc->p_threads[i];
+		if (t1 && !strcmp(t->t_name,t1->t_name)) 
+		  proc->p_threads[i]=NULL;
+	}
+#endif
 
+	spinlock_release(&proc->p_lock);
 	spl = splhigh();
 	t->t_proc = NULL;
 	splx(spl);
@@ -483,3 +514,19 @@ void curproc_cleanup(void* dummy){
 	kfree(curproc->fileTable);
 	proc_remthread(curthread);
 }
+
+#if PC_LINK
+/***  force all children to exit on parent process exit  ***/
+
+void kill_children(struct proc* p){
+	struct proc* child;
+
+	for (int i=0; i<MAX_CHILDREN; i++){
+		child= p->children[i];
+		if(child) exit_process(child);
+	}
+
+	p->num_children=0;
+}
+
+#endif

@@ -107,7 +107,7 @@ boot(void)
 	hello();
 	#endif
 
-	kprintf("Put-your-group-name-here's system version %s (%s #%d)\n",
+	kprintf("group 14's system version %s (%s #%d)\n",
 		GROUP_VERSION, buildconfig, buildversion);
 	kprintf("\n");
 
@@ -218,7 +218,7 @@ kmain(char *arguments)
 #if OPT_HELLO
 	hello();
 #endif
-
+	kprintf("\n*******************\n\nPROJECT C2: SHELL\nGhiglione Federico\nMazzucco Ludovica\nPalermo Bruno\n\n*******************\n\n");
 	menu(arguments);
 
 	/* Should not get here */

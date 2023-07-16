@@ -260,17 +260,12 @@ cpu_create(unsigned hardware_number)
  *
  * (Freeing the stack you're actually using to run is ... inadvisable.)
  */
-static
+
 void
 thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
 	KASSERT(thread->t_state != S_RUN);
-
-	/*
-	 * If you add things to struct thread, be sure to clean them up
-	 * either here or in thread_exit(). (And not both...)
-	 */
 
 	/* Thread subsystem fields */
 	KASSERT(thread->t_proc == NULL);
@@ -802,6 +797,7 @@ thread_exit(void)
 	thread_switch(S_ZOMBIE, NULL, NULL);
 	panic("braaaaaaaiiiiiiiiiiinssssss\n");
 }
+
 
 /*
  * Yield the cpu to another process, but stay runnable.

@@ -140,6 +140,7 @@ defoption synch
 optfile synch thread/synch.c 
 defoption waitpid
 defoption fork
+defoption project
 debug				
 device lamebus0			
 device emu* at lamebus*		
@@ -159,3 +160,4 @@ options syscalls
 options synch
 options waitpid
 options fork
+options project

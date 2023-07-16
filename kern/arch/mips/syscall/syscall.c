@@ -212,7 +212,6 @@ syscall(struct trapframe *tf)
 			else
 				err = 0;
 			break;
-	    /* Add stuff here */
 
 	    default:
 		kprintf("Unknown syscall %d\n", callno);

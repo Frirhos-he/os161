@@ -28,7 +28,6 @@ void openfileIncrRefCount(struct openfile *of) {
 }
 
 int fdtable_dup(int oldfd, int newfd);
-int file_dup(struct openfile * old_file,struct openfile * new_file);
 
 //open and close syscalls
 
@@ -39,9 +38,10 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     struct vnode *v;
     struct openfile *of=NULL;
     int result;
+    userptr_t path_temp= path;
 
     //open file
-    result = vfs_open((char *)path, openflags, mode, &v);
+    result = vfs_open((char *)path_temp, openflags, mode, &v);
     if (result) {
       *errp = ENOENT;
       return -1;
@@ -66,7 +66,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
         of->countref_lk=kmalloc(sizeof(struct spinlock));
         spinlock_init(of->countref_lk);
         of->vn = v;
-        of->offset = 0; // TODO: handle offset with append
+        of->offset = 0; 
         if(openflags && O_APPEND != 0){
             //if I have the APPEND flag, update the offset
             of->offset = v->vn_len;
@@ -94,7 +94,6 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     of->vn = NULL;
     spinlock_cleanup(of->countref_lk);
     kfree(of->countref_lk);
-    vfs_close(v);	
     vfs_close(v);
     return -1;
 }
@@ -235,12 +234,10 @@ sys_read(int fd, userptr_t buf_ptr, size_t size)
   for (i=0; i<(int)size; i++) {
     temp_buf[i] = getch();
     if (temp_buf[i] < 0){
-     // temp_buf[i]='\0';
       int result= copyout(temp_buf,(userptr_t)buf_ptr,(size_t)i);
       return result;
     }
   }
- // temp_buf[size]='\0';
   copyout(temp_buf,(userptr_t)buf_ptr,size);
   kfree(temp_buf);
 
@@ -309,9 +306,7 @@ file_write(int fd, userptr_t buf_ptr, size_t size) {
     if (vn==NULL) 
         return -1;
 
-    off_t remaining = vn->vn_len - of->offset;//remaining length of the file
-    size_t bytes_to_write = (size < (size_t)remaining) ? size : (size_t)remaining;
-    //bytes_to_write is the lower between remaining and size
+    size_t bytes_to_write= size;
   
     //initializing iovec and uio
     iov.iov_ubase = buf_ptr;
@@ -332,7 +327,7 @@ file_write(int fd, userptr_t buf_ptr, size_t size) {
 
     of->offset = u.uio_offset;
     nwrite = bytes_to_write - u.uio_resid;
-    return (nwrite);
+    return nwrite;
 }
 
 #endif
@@ -420,7 +415,7 @@ int sys_dup2(int oldfd, int newfd){
         return EBADF;
     }
     if(newfd == oldfd)
-        return oldfd; //same fd (should be an error ?)
+        return oldfd; //same fd 
     if(newfd < 0 || newfd >= __OPEN_MAX ){
         return EBADF;
     }
@@ -439,12 +434,12 @@ int sys_dup2(int oldfd, int newfd){
     
 }
 
-int fdtable_dup(int oldfd, int newfd){
-  //  struct openfile * new_file;
-    struct openfile * old_file;
-  //  int err;
+// auxiliary function for dup
 
- //   KASSERT(fdt != NULL);
+int fdtable_dup(int oldfd, int newfd){
+  
+    struct openfile * old_file;
+ 
     KASSERT(oldfd >= 0 && oldfd <__OPEN_MAX);
     KASSERT(newfd >= 0 && newfd <__OPEN_MAX);
 
@@ -457,38 +452,11 @@ int fdtable_dup(int oldfd, int newfd){
     curproc->fileTable[newfd]=old_file;
     openfileIncrRefCount(old_file);
 
-    //allocate the new file
- /*   new_file = kmalloc(sizeof(struct openfile));
-    if(new_file == NULL){
-        return ENOMEN;
-    }
-
-    //copy the old file fields in the new file
-    err = file_dup(old_file,new_file);
-    if(err){
-        kfree(new_file);
-        return err;
-    }
-
-    curproc->fileTable[newfd] = new_file; */
     return 0;
     
 }
 
-int file_dup(struct openfile * old_file,struct openfile * new_file){
-    KASSERT(old_file != NULL);
-    KASSERT(new_file != NULL);
-
-    new_file->vn = old_file->vn;
-    new_file->offset = old_file->offset;
-    new_file->countRef = old_file->countRef;
-
-    openfileIncrRefCount(old_file);
-    openfileIncrRefCount(new_file);
-
-    return 0;
-    
-}
+// chdir syscall
 
 int sys_chdir(userptr_t path){
 
