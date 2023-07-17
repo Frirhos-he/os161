@@ -160,4 +160,3 @@ options syscalls
 options synch
 options waitpid
 options fork
-options project

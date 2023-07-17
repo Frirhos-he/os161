@@ -43,7 +43,7 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     //open file
     result = vfs_open((char *)path_temp, openflags, mode, &v);
     if (result) {
-      *errp = ENOENT;
+      *errp = result; //manual reference
       return -1;
       }
 
@@ -51,7 +51,8 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     struct stat file_stat;
     result = VOP_STAT(v, &file_stat);
     if(result){
-      *errp = ENOENT;
+      *errp = result; // manual refernce
+      vfs_close(v);
       return -1;
     }
 
@@ -78,6 +79,8 @@ sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     if (of==NULL) { 
         // no free slot in system open file table
         *errp = ENFILE;
+        vfs_close(v);
+        return -1;
     }
     else {
         for (fd=STDERR_FILENO+1; fd<OPEN_MAX; fd++) {
@@ -104,13 +107,14 @@ sys_close(int fd){
     struct openfile *of=NULL; 
     struct vnode *vn;
 
+
     if (fd<0||fd>OPEN_MAX)
-        return -1;
+        return EBADF; // manual reference invalid file descriptor
 
     of = curproc->fileTable[fd];
 
     if (of==NULL)
-        return -1;
+        return EBADF; //Manual reference invalid file descriptor
 
     //remove from curproc fileTable
     curproc->fileTable[fd] = NULL; 
@@ -119,11 +123,11 @@ sys_close(int fd){
     if (--of->countRef > 0) 
         return 0; // just decrement ref cnt
     vn = of->vn;
-    if (vn==NULL) return -1;
+    if (vn==NULL) return EBADF; //invalid vnode
     of->vn = NULL;
     spinlock_cleanup(of->countref_lk);
     kfree(of->countref_lk);
-    vfs_close(vn);	
+    vfs_close(vn);
     return 0;
 }
 
@@ -140,15 +144,15 @@ file_read(int fd, userptr_t buf_ptr, size_t size) {
     void *kbuf;
 
     if (fd<0||fd>OPEN_MAX)
-        return -1;
+        return EBADF; //manual reference
 
     of = curproc->fileTable[fd];
     if (of==NULL) 
-        return -1;
+        return EBADF;
 
     vn = of->vn;
     if (vn==NULL)
-        return -1;
+        return EBADF;
 
     off_t remaining = vn->vn_len - of->offset;//remaining length of the file
     size_t bytes_to_read = (size < (size_t)remaining) ? size : (size_t)remaining;
@@ -178,15 +182,15 @@ file_read(int fd, userptr_t buf_ptr, size_t size) {
     struct openfile *of;
 
     if (fd<0||fd>OPEN_MAX)
-        return -1;
+        return EBADF;
   
     of = curproc->fileTable[fd];
     if (of==NULL)
-        return -1;
+        return EBADF;
 
     vn = of->vn;
     if (vn==NULL)   
-        return -1;
+        return EBADF;
 
     off_t remaining = vn->vn_len - of->offset;//remaining length of the file
     size_t bytes_to_read = (size < (size_t)remaining) ? size : (size_t)remaining;
@@ -228,7 +232,7 @@ sys_read(int fd, userptr_t buf_ptr, size_t size)
   //stdin
   char* temp_buf= kmalloc((size)*sizeof(char));
   if(temp_buf==NULL){
-    return -1;
+    return ENOMEM;
   }
 
   for (i=0; i<(int)size; i++) {
@@ -254,17 +258,17 @@ file_write(int fd, userptr_t buf_ptr, size_t size) {
     struct vnode *vn;
     struct openfile *of;
     void *kbuf;
-
+    int result;
     if (fd<0||fd>OPEN_MAX)
-        return -1;
+        return EBADF;
   
     of = curproc->fileTable[fd];
     if (of==NULL)
-        return -1;
+        return EBADF;
     
     vn = of->vn;
     if (vn==NULL)   
-        return -1;
+        return EBADF;
 
     off_t remaining = vn->vn_len - of->offset;//remaining length of the file
     size_t bytes_to_write = (size < (size_t)remaining) ? size : (size_t)remaining;
@@ -272,16 +276,24 @@ file_write(int fd, userptr_t buf_ptr, size_t size) {
   
 
     kbuf = kmalloc(bytes_to_write);
-    copyin(buf_ptr,kbuf,bytes_to_write);
+    if(kbuf == NULL) return ENOMEM;
+    result = copyin(buf_ptr,kbuf,bytes_to_write);
+    if(result != 0){
+        kfree(kbuf);
+        return result;
+    }
     uio_kinit(&iov, &ku, kbuf, bytes_to_write, of->offset, UIO_WRITE);
     result = VOP_WRITE(vn, &ku);
     if (result) {
+        kfree(kbuf);
         return result;
     }
 
     kfree(kbuf);
     of->offset = ku.uio_offset;
     nwrite = bytes_to_write - ku.uio_resid;
+    if(ku.uio_resid != 0)return ENOSPC; //no space left on file system
+
     return (nwrite);
 }
 
@@ -296,15 +308,15 @@ file_write(int fd, userptr_t buf_ptr, size_t size) {
     struct openfile *of;
 
     if (fd<0||fd>OPEN_MAX)
-        return -1;
+        return EBADF;
   
     of = curproc->fileTable[fd];
     if (of==NULL)
-        return -1;
+        return EBADF;
 
     vn = of->vn;
     if (vn==NULL) 
-        return -1;
+        return EBADF;
 
     size_t bytes_to_write= size;
   
@@ -336,7 +348,7 @@ int
 sys_write(int fd, userptr_t buf_ptr, size_t size)
 {
     int i;
-
+    int result;
     //write into a file
     if (fd!=STDOUT_FILENO && fd!=STDERR_FILENO) {
         return file_write(fd, buf_ptr, size);
@@ -346,9 +358,13 @@ sys_write(int fd, userptr_t buf_ptr, size_t size)
     //write to stdout ot stderr
     char* temp_buf= kmalloc((size+1)*sizeof(char));
     if(temp_buf==NULL){
-    return -1;
+    return ENOMEM;
     }
-    copyin((userptr_t)buf_ptr, temp_buf, size+1);
+    result = copyin((userptr_t)buf_ptr, temp_buf, size+1);
+    if(result != 0){
+        kfree(temp_buf);
+        return result; //invalid address space for buf
+    }
     for (i=0; i<(int)size; i++) {
         putch(temp_buf[i]);
         }
@@ -377,6 +393,9 @@ off_t sys_lseek(int fd, off_t pos, int whence){
             break;
         default:
             return EINVAL; //invalid whence value
+    }
+    if(curproc->fileTable[fd]->offset <0 ){
+        return EINVAL; //result of seek position negative
     }
 
     return curproc->fileTable[fd]->offset;

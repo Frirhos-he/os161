@@ -98,7 +98,7 @@ sys_waitpid(pid_t pid, userptr_t statusp, int options)
     struct proc *p = proc_search_pid(pid);
     int s;
     if (p==NULL) 
-        return -1;
+        return EINVAL; //manual reference
     s = proc_wait(p,options);
     if (statusp!=NULL) 
         *(int*)statusp = s;
@@ -133,7 +133,8 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
     int result;
 
     KASSERT(curproc != NULL);
-
+    if(curproc->p_numthreads > MAX_THREADS)
+        return EMPROC;
     newp = proc_create_runprogram(curproc->p_name);
     if (newp == NULL) {
         return ENOMEM;
@@ -143,6 +144,7 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
     curproc->num_children++;
 
     struct proc* child;
+    struct proc* p = curproc;
 
 	for (int i=0; i<MAX_CHILDREN; i++){
 		child= p->children[i];
@@ -151,10 +153,10 @@ int sys_fork(struct trapframe *ctf, pid_t *retval) {
 #endif
     /* done here as we need to duplicate the address space 
        of the current process */
-    as_copy(curproc->p_addrspace, &(newp->p_addrspace));
+    result = as_copy(curproc->p_addrspace, &(newp->p_addrspace));
     if(newp->p_addrspace == NULL){
         proc_destroy(newp); 
-        return ENOMEM; 
+        return result; 
     }
 
     /* we need a copy of the parent's trapframe */
